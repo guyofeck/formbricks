@@ -1,0 +1,199 @@
+# Base44 development environment for Formbricks.
+# Runs the monorepo from the bind-mounted source (turbo `go` = Next.js dev + package watchers)
+# alongside the infra from docker-compose.dev.yml. Web UI is served on host port 3000.
+x-hub-env: &hub-env
+  API_KEY: dev-api-key
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hub?sslmode=disable
+  PGHOST: postgres
+  PGPORT: "5432"
+  PGUSER: postgres
+  PGPASSWORD: postgres
+  PGDATABASE: hub
+  PGSSLMODE: disable
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    command: postgres -c shared_preload_libraries=vector
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: on-failure
+
+  valkey:
+    image: valkey/valkey@sha256:12ba4f45a7c3e1d0f076acd616cb230834e75a77e8516dde382720af32832d6d
+    command: "valkey-server --maxmemory-policy noeviction"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: on-failure
+
+  mailhog:
+    image: arjenz/mailhog
+    ports:
+      - "8025:8025"
+    restart: on-failure
+
+  # Creates the `formbricks` and `hub` databases (idempotent).
+  db-create:
+    image: pgvector/pgvector:pg18
+    restart: "no"
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        for db in formbricks hub; do
+          if [ "$$(psql "$$PGURL" -tAc "SELECT 1 FROM pg_database WHERE datname = '$$db'")" != "1" ]; then
+            psql "$$PGURL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $$db"
+          fi
+        done
+    environment:
+      PGURL: postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  hub-migrate:
+    image: ghcr.io/formbricks/hub:0.8.4
+    restart: "no"
+    entrypoint: ["sh", "-ec"]
+    command:
+      - /usr/local/bin/goose -dir /app/migrations postgres "$$DATABASE_URL" up && /usr/local/bin/river migrate-up --database-url "$$DATABASE_URL"
+    environment: *hub-env
+    depends_on:
+      db-create:
+        condition: service_completed_successfully
+
+  hub:
+    image: ghcr.io/formbricks/hub:0.8.4
+    environment: *hub-env
+    depends_on:
+      hub-migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  hub-worker:
+    image: ghcr.io/formbricks/hub:0.8.4
+    entrypoint: ["/app/hub-worker"]
+    healthcheck:
+      disable: true
+    environment: *hub-env
+    depends_on:
+      hub-migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  cube:
+    image: cubejs/cube:v1.6.6
+    env_file:
+      - /run/base44/app.env
+    environment:
+      CUBEJS_DB_TYPE: postgres
+      CUBEJS_DB_HOST: postgres
+      CUBEJS_DB_NAME: postgres
+      CUBEJS_DB_USER: postgres
+      CUBEJS_DB_PASS: postgres
+      CUBEJS_DB_PORT: "5432"
+      CUBEJS_DEV_MODE: "true"
+      CUBEJS_JWT_ISSUER: formbricks-web
+      CUBEJS_JWT_AUDIENCE: formbricks-cube
+      CUBEJS_DEFAULT_API_SCOPES: meta,data
+      CUBEJS_CACHE_AND_QUEUE_DRIVER: memory
+    volumes:
+      - ./docker/cube/cube.js:/cube/conf/cube.js:ro
+      - ./docker/cube/schema:/cube/conf/model:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      db-create:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  web:
+    image: node:24.14.0-bookworm
+    working_dir: /app
+    volumes:
+      - .:/app
+      - pnpm-store:/pnpm-store
+    ports:
+      - "3000:3000"
+    env_file:
+      - /run/base44/app.env
+    environment:
+      - BASE44_PUBLIC_HOST_SUFFIX
+      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+      - npm_config_store_dir=/pnpm-store
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - WATCHPACK_POLLING=true
+      - WEBAPP_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - NEXTAUTH_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/formbricks?schema=public
+      - REDIS_URL=redis://valkey:6379
+      - HUB_API_URL=http://hub:8080
+      - HUB_API_KEY=dev-api-key
+      - CUBEJS_API_URL=http://cube:4000
+      - CUBEJS_JWT_ISSUER=formbricks-web
+      - CUBEJS_JWT_AUDIENCE=formbricks-cube
+      - MAIL_FROM=noreply@example.com
+      - MAIL_FROM_NAME=Formbricks
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - SMTP_SECURE_ENABLED=0
+      - SMTP_USER=smtpUser
+      - SMTP_PASSWORD=smtpPassword
+      - EMAIL_VERIFICATION_DISABLED=1
+      - PASSWORD_RESET_DISABLED=1
+      - LOG_LEVEL=info
+    # ENCRYPTION_KEY must be 32 chars or 64 hex chars; derive a valid 64-hex key when the
+    # supplied value has another shape (e.g. a generated development placeholder).
+    command:
+      - bash
+      - -ec
+      - |
+        if [ "$${#ENCRYPTION_KEY}" -ne 32 ] && ! [[ "$$ENCRYPTION_KEY" =~ ^[[:xdigit:]]{64}$$ ]]; then
+          export ENCRYPTION_KEY="$$(printf %s "$$ENCRYPTION_KEY" | sha256sum | cut -c1-64)"
+        fi
+        corepack enable
+        CI=true pnpm install --frozen-lockfile
+        # Build the survey/js-core bundles once (served from apps/web/public/js), then run only the
+        # web `go` task (builds its deps + applies migrations + next dev). Running every package
+        # watcher (`pnpm go`) OOM-kills next-server on an 8 GB sandbox.
+        pnpm exec turbo run build --filter=@formbricks/surveys --filter=@formbricks/js-core --env-mode=loose
+        exec pnpm exec turbo run go --filter=@formbricks/web --env-mode=loose
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sS -o /dev/null --max-time 20 -w '%{http_code}' http://localhost:3000/auth/login | grep -q '^[23]' || { echo 'web: Next.js not responding'; exit 1; }"]
+      interval: 30s
+      timeout: 25s
+      retries: 5
+      start_period: 900s
+    depends_on:
+      db-create:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      hub:
+        condition: service_started
+      cube:
+        condition: service_started
+    restart: on-failure
+
+volumes:
+  postgres:
+  valkey-data:
+  pnpm-store:

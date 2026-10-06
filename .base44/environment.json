@@ -1,0 +1,31 @@
+{
+  "healthPath": "/auth/login",
+  "previewPort": 3000,
+  "secrets": [
+    {
+      "description": "Data encryption key (32 chars or 64 hex chars, e.g. `openssl rand -hex 32`). Other shapes are hashed to 64 hex at startup by the web service command.",
+      "generatedForDevelopment": true,
+      "name": "ENCRYPTION_KEY",
+      "requiredAtBoot": true
+    },
+    {
+      "description": "Session signing secret (`openssl rand -hex 32`).",
+      "generatedForDevelopment": true,
+      "name": "NEXTAUTH_SECRET",
+      "requiredAtBoot": true
+    },
+    {
+      "description": "Shared secret for cron/API job endpoints (`openssl rand -hex 32`).",
+      "generatedForDevelopment": true,
+      "name": "CRON_SECRET",
+      "requiredAtBoot": true
+    },
+    {
+      "description": "JWT secret shared between the web app and the Cube analytics service (`openssl rand -hex 32`).",
+      "generatedForDevelopment": true,
+      "name": "CUBEJS_API_SECRET",
+      "requiredAtBoot": true
+    }
+  ],
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d"
+}

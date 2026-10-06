@@ -184,3 +184,11 @@ Shared agent skills and subagents are installed under `.claude/`, and design con
 - If `.agents/formbricks-context/DESIGN.md` exists, read it before building or reviewing UI for this repo: it indexes the per-surface design guides (tokens, components, motion, the quality bar).
 - Skills and subagents live in `.claude/`. Treat the design context above as part of these instructions.
 <!-- robots:end -->
+
+## Base44 Dev Environment
+
+- `docker compose -f docker-compose.base44.yml up -d` runs everything; the web UI is on port 3000 (`/auth/login`). Infra (pgvector Postgres, Valkey, Hub API + worker, Cube, MailHog on 8025) mirrors `docker-compose.dev.yml`; rustfs/S3 is omitted (S3 is optional).
+- The `web` service (node 24, repo bind-mounted) runs `pnpm install`, builds the surveys/js-core bundles once, then `turbo run go --filter=@formbricks/web` (builds deps, applies migrations, `next dev`). Do NOT switch it to plain `pnpm go`: all the package watchers OOM-kill `next-server` on the 8 GB sandbox. After editing `packages/*`, rebuild that package (`docker compose -f docker-compose.base44.yml exec web pnpm exec turbo run build --filter=<pkg> --env-mode=loose`) or restart `web`.
+- Turbo runs in `--env-mode=loose` because env comes from the container (no root `.env`); strict mode would strip it from the dev task.
+- First boot takes ~10 minutes (install + package builds + first Turbopack compile). The "Ecmascript file had an error / Edge Instrumentation / packages/logger" messages are non-fatal warnings.
+- Secrets come from `/run/base44/app.env`; `allowedDevOrigins` in `apps/web/next.config.mjs` adds `3000-$BASE44_PUBLIC_HOST_SUFFIX` for the preview.

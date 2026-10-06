@@ -5,6 +5,7 @@
     "build": {
       "env": [
         "ASSET_PREFIX_URL",
+        "BASE44_PUBLIC_HOST_SUFFIX",
         "BASE_PATH",
         "E2E_TESTING",
         "NEXTAUTH_URL",
