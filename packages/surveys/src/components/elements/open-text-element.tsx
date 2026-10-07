@@ -35,6 +35,7 @@ export function OpenTextElement({
   const isCurrent = element.id === currentElementId;
   const isRequired = element.required;
   const { t } = useTranslation();
+  const maximumLengthRule = element.validation?.rules.find((rule) => rule.type === "maxLength");
   useTtc(element.id, ttc, setTtc, startTime, setStartTime, isCurrent);
 
   const handleChange = (inputValue: string) => {
@@ -72,6 +73,9 @@ export function OpenTextElement({
         longAnswer={element.longAnswer !== false}
         inputType={getInputType()}
         charLimit={element.inputType === "text" ? element.charLimit : undefined}
+        characterCountMax={
+          maximumLengthRule && "max" in maximumLengthRule.params ? maximumLengthRule.params.max : undefined
+        }
         errorMessage={errorMessage}
         dir={dir}
         rows={3}
