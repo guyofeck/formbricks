@@ -672,6 +672,26 @@ describe("deleteElementFromBlock", () => {
 });
 
 describe("duplicateElementInBlock", () => {
+  test("should copy question settings independently without changing other blocks", () => {
+    const original = createMockElement("q1");
+    original.headline = { default: "Original question", de: "Originalfrage" };
+    const otherBlock = createMockBlock("block-2", "Block 2", [createMockElement("q2")]);
+    const survey = createMockSurvey([createMockBlock("block-1", "Block 1", [original]), otherBlock]);
+
+    const result = duplicateElementInBlock(survey, "block-1", "q1");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const duplicate = result.data.blocks[0].elements[1];
+      expect(duplicate).toEqual({ ...original, id: duplicate.id, isDraft: true });
+      expect(duplicate.headline).not.toBe(original.headline);
+      duplicate.headline.default = "Edited copy";
+      expect(original.headline.default).toBe("Original question");
+      expect(survey.blocks[0].elements).toEqual([original]);
+      expect(result.data.blocks[1]).toEqual(otherBlock);
+    }
+  });
+
   test("should duplicate element with new ID", () => {
     const survey = createMockSurvey([createMockBlock("block-1", "Block 1", [createMockElement("q1")])]);
     const result = duplicateElementInBlock(survey, "block-1", "q1");

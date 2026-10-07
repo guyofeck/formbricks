@@ -39,6 +39,7 @@ import {
   deleteBlock,
   deleteElementFromBlock,
   duplicateBlock as duplicateBlockHelper,
+  duplicateElementInBlock,
   findElementLocation,
   moveBlock as moveBlockHelper,
   moveElementInBlock,
@@ -460,21 +461,17 @@ export const ElementsView = ({
     const element = elements[elementIdx];
     if (!element) return;
 
-    const { blockId, blockIndex } = findElementLocation(localSurvey, element.id);
+    const { blockId, blockIndex, elementIndex } = findElementLocation(localSurvey, element.id);
     if (!blockId || blockIndex === -1) return;
 
-    // Create a duplicate of the element with a new ID
-    const newElementId = createId();
-    const duplicatedElement = { ...element, id: newElementId };
-
-    // Add the duplicated element to the same block
-    const result = addElementToBlock(localSurvey, blockId, duplicatedElement);
+    const result = duplicateElementInBlock(localSurvey, blockId, element.id);
 
     if (!result.ok) {
       toast.error(result.error.message);
       return;
     }
 
+    const newElementId = result.data.blocks[blockIndex].elements[elementIndex + 1].id;
     setActiveElementId(newElementId);
     internalElementIdMap[newElementId] = createId();
 
