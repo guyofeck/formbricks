@@ -57,6 +57,10 @@ export function OpenTextElement({
     return "text";
   };
 
+  const maxLengthRule = element.validation?.rules.find((rule) => rule.type === "maxLength");
+  const characterCountLimit =
+    maxLengthRule && "max" in maxLengthRule.params ? maxLengthRule.params.max : undefined;
+
   return (
     <form key={element.id} onSubmit={handleOnSubmit} className="w-full">
       <OpenText
@@ -72,6 +76,7 @@ export function OpenTextElement({
         longAnswer={element.longAnswer !== false}
         inputType={getInputType()}
         charLimit={element.inputType === "text" ? element.charLimit : undefined}
+        characterCountLimit={characterCountLimit}
         errorMessage={errorMessage}
         dir={dir}
         rows={3}

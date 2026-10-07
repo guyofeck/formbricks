@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ElementError, getElementErrorAria } from "@/components/general/element-error";
 import { ElementHeader } from "@/components/general/element-header";
 import { Input } from "@/components/general/input";
@@ -17,6 +16,7 @@ interface OpenTextProps {
   requiredLabel?: string;
   longAnswer?: boolean;
   inputType?: "text" | "email" | "url" | "phone" | "number";
+  characterCountLimit?: number;
   charLimit?: {
     min?: number;
     max?: number;
@@ -42,6 +42,7 @@ function OpenText({
   longAnswer = false,
   inputType = "text",
   charLimit,
+  characterCountLimit,
   errorMessage,
   dir = "auto",
   rows = 3,
@@ -49,27 +50,29 @@ function OpenText({
   imageUrl,
   videoUrl,
 }: Readonly<OpenTextProps>): React.JSX.Element {
-  const [currentLength, setCurrentLength] = useState(value.length);
+  const currentLength = value.length;
+  const counterMax = characterCountLimit ?? charLimit?.max;
+  const counterId = counterMax !== undefined ? `${inputId}-character-count` : undefined;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
-    const newValue = e.target.value;
-    setCurrentLength(newValue.length);
-    onChange(newValue);
+    onChange(e.target.value);
   };
 
   const renderCharLimit = (): React.JSX.Element | null => {
-    if (charLimit?.max === undefined) return null;
-    const isOverLimit = currentLength >= charLimit.max;
+    if (counterMax === undefined) return null;
+    const isOverLimit = currentLength >= counterMax;
     return (
-      <span className={cn("text-xs", isOverLimit ? "font-semibold text-red-500" : "text-brand")}>
-        {currentLength}/{charLimit.max}
-      </span>
+      <div
+        id={counterId}
+        className={cn("text-xs", isOverLimit ? "font-semibold text-red-500" : "text-brand")}>
+        {currentLength}/{counterMax}
+      </div>
     );
   };
 
   const descriptionId = description ? `${inputId}-description` : undefined;
   const errorAria = getElementErrorAria(inputId, errorMessage);
-  const describedBy = [descriptionId, errorAria.ariaDescribedBy].filter(Boolean).join(" ");
+  const describedBy = [descriptionId, errorAria.ariaDescribedBy, counterId].filter(Boolean).join(" ");
 
   return (
     <div className="w-full space-y-4" id={elementId} dir={dir}>
