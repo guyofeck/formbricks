@@ -460,15 +460,15 @@ export const ElementsView = ({
     const element = elements[elementIdx];
     if (!element) return;
 
-    const { blockId, blockIndex } = findElementLocation(localSurvey, element.id);
+    const { blockId, blockIndex, elementIndex } = findElementLocation(localSurvey, element.id);
     if (!blockId || blockIndex === -1) return;
 
-    // Create a duplicate of the element with a new ID
+    // Create an independent copy of the element with a new ID
     const newElementId = createId();
-    const duplicatedElement = { ...element, id: newElementId };
+    const duplicatedElement = { ...structuredClone(element), id: newElementId };
 
-    // Add the duplicated element to the same block
-    const result = addElementToBlock(localSurvey, blockId, duplicatedElement);
+    // Insert the duplicated element directly below the original in the same block
+    const result = addElementToBlock(localSurvey, blockId, duplicatedElement, elementIndex + 1);
 
     if (!result.ok) {
       toast.error(result.error.message);

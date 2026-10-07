@@ -229,6 +229,16 @@ export const EditorCardMenu = ({
         <DropdownMenuContent>
           <div className="flex flex-col">
             {cardType === "element" && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  duplicateCard(cardIdx);
+                }}
+                icon={<CopyIcon className="size-4" />}>
+                <span>{t("workspace.surveys.edit.duplicate_question")}</span>
+              </DropdownMenuItem>
+            )}
+            {cardType === "element" && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger
                   className="cursor-pointer text-sm text-slate-600 hover:text-slate-700"
